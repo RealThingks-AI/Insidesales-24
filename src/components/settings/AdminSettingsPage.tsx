@@ -1,29 +1,23 @@
 import { useState, lazy, Suspense, useEffect } from 'react';
-import { Users, Lock, Database, Shield, Activity, FileText, Megaphone, Palette, History } from 'lucide-react';
+import { Users, Lock, History, Database } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
-import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, ShieldAlert, Settings2, BarChart3 } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionsContext';
+import { Loader2, ShieldAlert } from 'lucide-react';
 import SettingsCard from './shared/SettingsCard';
 import SettingsLoadingSkeleton from './shared/SettingsLoadingSkeleton';
 
 // Lazy load admin section components
 const UserManagement = lazy(() => import('@/components/UserManagement'));
 const PageAccessSettings = lazy(() => import('@/components/settings/PageAccessSettings'));
-const BackupRestoreSettings = lazy(() => import('@/components/settings/BackupRestoreSettings'));
 const AuditLogsSettings = lazy(() => import('@/components/settings/AuditLogsSettings'));
-const SystemStatusSettings = lazy(() => import('@/components/settings/SystemStatusSettings'));
-const ScheduledReportsSettings = lazy(() => import('@/components/settings/ScheduledReportsSettings'));
-const AnnouncementSettings = lazy(() => import('@/components/settings/AnnouncementSettings'));
-const BrandingSettings = lazy(() => import('@/components/settings/BrandingSettings'));
+const BackupRestoreSettings = lazy(() => import('@/components/settings/BackupRestoreSettings'));
 
 const adminTabs = [
   { id: 'users', label: 'Users', icon: Users },
   { id: 'access', label: 'Access', icon: Lock },
-  { id: 'config', label: 'Config', icon: Settings2 },
   { id: 'logs', label: 'Logs', icon: History },
-  { id: 'system', label: 'System', icon: Activity },
-  { id: 'reports', label: 'Reports', icon: BarChart3 }
+  { id: 'system', label: 'System', icon: Database },
 ];
 
 interface AdminSettingsPageProps {
@@ -31,19 +25,16 @@ interface AdminSettingsPageProps {
 }
 
 const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
-  const { userRole, loading: roleLoading } = useUserRole();
+  const { isAdmin, loading: roleLoading } = usePermissions();
 
   const getTabFromSection = (section: string | null) => {
     if (!section) return 'users';
     const sectionToTab: Record<string, string> = {
       'users': 'users',
       'page-access': 'access',
-      'branding': 'config',
       'audit-logs': 'logs',
       'backup': 'system',
       'system-status': 'system',
-      'scheduled-reports': 'reports',
-      'announcements': 'reports'
     };
     return sectionToTab[section] || 'users';
   };
@@ -55,8 +46,6 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
       setActiveTab(getTabFromSection(defaultSection));
     }
   }, [defaultSection]);
-
-  const isAdmin = userRole === 'admin';
 
   if (roleLoading) {
     return (
@@ -84,19 +73,21 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 w-full">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 max-w-2xl">
-          {adminTabs.map(tab => {
-            const Icon = tab.icon;
-            return (
-              <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
-                <Icon className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only">{tab.label}</span>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+        <div className="sticky top-0 z-10 bg-background pb-2 border-b border-border">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+            {adminTabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
+                  <span className="sr-only sm:not-sr-only">{tab.label}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
 
         <TabsContent value="users" className="mt-6 space-y-6">
           <SettingsCard icon={Users} title="User Directory" description="Manage user accounts, roles, and permissions">
@@ -114,44 +105,16 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
           </SettingsCard>
         </TabsContent>
 
-        <TabsContent value="config" className="mt-6 space-y-6">
-          <SettingsCard icon={Palette} title="Branding Settings" description="Customize app logo, colors, and appearance">
-            <Suspense fallback={<SettingsLoadingSkeleton />}>
-              <BrandingSettings />
-            </Suspense>
-          </SettingsCard>
-        </TabsContent>
-
         <TabsContent value="logs" className="mt-6 space-y-6">
           <Suspense fallback={<SettingsLoadingSkeleton />}>
             <AuditLogsSettings />
           </Suspense>
         </TabsContent>
 
-        <TabsContent value="system" className="mt-6 space-y-6">
-          <SettingsCard icon={Database} title="Data Backup & Restore" description="Export data and manage backups">
+        <TabsContent value="system" className="mt-6 space-y-4">
+          <SettingsCard icon={Database} title="Data Backup & Restore" description="Export data, manage backups, and restore from previous snapshots">
             <Suspense fallback={<SettingsLoadingSkeleton />}>
               <BackupRestoreSettings />
-            </Suspense>
-          </SettingsCard>
-
-          <SettingsCard icon={Activity} title="System Status" description="Monitor system health, database stats, and storage usage">
-            <Suspense fallback={<SettingsLoadingSkeleton />}>
-              <SystemStatusSettings />
-            </Suspense>
-          </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="reports" className="mt-6 space-y-6">
-          <SettingsCard icon={FileText} title="Scheduled Reports" description="Configure automated email reports">
-            <Suspense fallback={<SettingsLoadingSkeleton />}>
-              <ScheduledReportsSettings />
-            </Suspense>
-          </SettingsCard>
-
-          <SettingsCard icon={Megaphone} title="Announcement Management" description="Create and manage system announcements">
-            <Suspense fallback={<SettingsLoadingSkeleton />}>
-              <AnnouncementSettings />
             </Suspense>
           </SettingsCard>
         </TabsContent>
