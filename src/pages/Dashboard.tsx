@@ -75,7 +75,7 @@ const Dashboard = () => {
 
       {/* Year selector below header - only in revenue view */}
       {view === 'revenue' && (
-        <div className="flex-shrink-0 px-6 py-3 border-b bg-background flex items-center justify-end">
+        <div className="flex-shrink-0 px-6 py-3 bg-background flex items-center justify-end">
           <Select value={selectedYear.toString()} onValueChange={value => setSelectedYear(parseInt(value))}>
             <SelectTrigger className="w-32">
               <SelectValue />
