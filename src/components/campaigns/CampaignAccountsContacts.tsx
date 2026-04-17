@@ -32,8 +32,6 @@ interface Props {
   campaignName?: string;
   campaignOwner?: string | null;
   endDate?: string | null;
-  compact?: boolean;
-  selectedRegions?: string[];
 }
 
 const statusColors: Record<string, string> = {
@@ -85,7 +83,7 @@ async function fetchAllContacts() {
   return allData;
 }
 
-export function CampaignAccountsContacts({ campaignId, isCampaignEnded, campaignName, campaignOwner, endDate, compact = false, selectedRegions = [] }: Props) {
+export function CampaignAccountsContacts({ campaignId, isCampaignEnded, campaignName, campaignOwner, endDate }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -184,20 +182,18 @@ export function CampaignAccountsContacts({ campaignId, isCampaignEnded, campaign
     },
   });
 
-  // All accounts for add modal — server-side filter by selectedRegions when provided
+  // All accounts for add modal
   const { data: allAccounts = [] } = useQuery({
-    queryKey: ["all-accounts", selectedRegions.join(",")],
+    queryKey: ["all-accounts"],
     queryFn: async () => {
-      let q = supabase.from("accounts").select("id, account_name, industry, region, country");
-      if (selectedRegions.length > 0) q = q.in("region", selectedRegions);
-      const { data, error } = await q;
+      const { data, error } = await supabase.from("accounts").select("id, account_name, industry, region, country");
       if (error) throw error;
       return data;
     },
     enabled: addAccountModalOpen,
   });
 
-  // All contacts - paginated fetch (filter client-side by linked-account region after fetch)
+  // All contacts - paginated fetch
   const { data: allContacts = [] } = useQuery({
     queryKey: ["all-contacts-paginated"],
     queryFn: fetchAllContacts,
