@@ -1,91 +1,82 @@
 
 
-## Fix Note Editor Bullet Point & Stakeholders Layout Issues
+# MART Workflow Restructure — Region → Audience → Message → Timing
 
-### Issues Found
+## New Order
 
-1. **Bullet point moves when typing**: `autoFocus` on the Textarea (line 633) places the cursor at position 0 (before `"• "`), so typing inserts text before the bullet instead of after it.
-
-2. **Notes panel lacks proper scrollbar**: The notes summary panel (line 580-679) has a `max-h-[280px]` on the inner div but the outer wrapper has no scroll constraint, so it still pushes content.
-
-3. **Stakeholders section grows unbounded**: The `StakeholdersSection` component has no max-height. When the Notes panel is open with many notes, it consumes all vertical space, squishing the Updates and Action Items sections to near-zero height.
-
-### Changes (single file: `src/components/DealExpandedPanel.tsx`)
-
-#### Fix 1: Bullet cursor positioning (line 628-634)
-
-Replace `autoFocus` on the Textarea with a `ref` callback that focuses the element AND places the cursor at the end of the text (after `"• "`):
-
-```tsx
-<Textarea
-  value={noteText}
-  onChange={(e) => setNoteText(e.target.value)}
-  onKeyDown={handleNoteKeyDown}
-  className="min-h-[100px] text-xs resize-none"
-  ref={(el) => {
-    if (el) {
-      el.focus();
-      const len = el.value.length;
-      el.selectionStart = len;
-      el.selectionEnd = len;
-    }
-  }}
-/>
+```text
+1. Region    →  2. Audience    →  3. Message      →  4. Timing
+   (geography)   (filtered by      (AI uses region    (when to
+                  region picks)     + audience ctx)    execute)
 ```
 
-#### Fix 2: Constrain Stakeholders section height
+Region first defines geography. Audience picks accounts/contacts within those regions. Message generates AI templates using both as context. Timing schedules execution.
 
-Wrap the StakeholdersSection output in a container with `max-h` and `overflow-y-auto` so it scrolls when content is large. Change the outer div (line 462) from:
+## Tab Restructure (CampaignDetail)
 
-```tsx
-<div className="px-3 pt-1.5 pb-1">
-```
+6 tabs → **5 tabs**: Overview · MART Strategy · Outreach · Tasks · Analytics
+- "Accounts & Contacts" tab merged into MART → Audience
+- "Materials" merged into Outreach tab
 
-to:
+## Section Changes
 
-```tsx
-<div className="px-3 pt-1.5 pb-1 max-h-[45%] overflow-y-auto shrink-0">
-```
+### 1. Region (first)
+- Multi-region cards (existing UI from `CampaignMARTRegion.tsx`).
+- Remove `messaging_note` field (unused).
+- Add live counter footer: **"X accounts and Y contacts available in selected regions"**.
+- Mark Done requires ≥1 region.
 
-However, since this is not inside a flex parent that uses percentage heights well, a better approach is to change the parent layout. The parent (line 1182) is:
+### 2. Audience (second)
+- **Drop** persona JSON form (`job_titles`, `departments`, etc.) from rendering. DB column preserved.
+- **Embed** `CampaignAccountsContacts` in compact mode, pre-filtered by `selectedRegions` from step 1.
+- "Add Accounts" / "Add Contacts" modals scope queries to selected regions only.
+- New bulk filter chips in Add modals: **Position** (multi-select), **Industry** (multi-select), "Select all filtered".
+- If no regions selected → inline warning "Select regions in step 1 first" + fallback to all regions.
+- Mark Done requires ≥1 account OR ≥1 contact linked.
 
-```tsx
-<div className="flex-1 min-h-0 flex flex-col overflow-hidden gap-1">
-```
+### 3. Message (third)
+- Add **"Generate with AI"** button on Email, LinkedIn, and Phone Script create/edit modals.
+- AI prompt context: campaign name, type, goal, **selected regions + linked audience** (now available since steps 1 & 2 ran first).
+- New edge function `generate-campaign-template` using Lovable AI Gateway (`google/gemini-3-flash-preview`) with tool-calling for structured JSON (subject/body for email; body for LinkedIn; opening/talking_points/objections for phone).
+- Materials block removed from this section.
 
-The fix: Make the StakeholdersSection a flex item that can shrink, and give it a max-height so it doesn't dominate. Change line 1184 from:
+### 4. Timing (last)
+- Keep existing date inputs.
+- Export `isWithinActiveWindow(campaign)` helper from `CampaignMARTTiming`.
+- Outreach actions (Send Email / Log Call / LinkedIn) blocked outside campaign date range with toast.
+- Active-window banner on Outreach tab.
+- Mark Done requires start_date + end_date with end_date ≥ today.
 
-```tsx
-<StakeholdersSection deal={deal} queryClient={queryClient} />
-```
+## Cross-Section Wiring
 
-to wrap it in a constrained container:
+| User action | System reaction |
+|---|---|
+| Picks regions in step 1 | Cached on campaign; Audience auto-refilters |
+| Opens Add Accounts (step 2) | Query: `accounts.region IN (selectedRegions)` |
+| Opens Add Contacts (step 2) | Filter via linked account region |
+| Clears all regions | Audience shows warning, falls back to all |
+| Generates AI template (step 3) | Prompt includes regions + linked accounts/contacts summary |
 
-```tsx
-<div className="shrink-0 max-h-[40%] overflow-y-auto">
-  <StakeholdersSection deal={deal} queryClient={queryClient} />
-</div>
-```
+## Files to Modify
 
-This ensures:
-- Stakeholders section gets at most 40% of the panel height
-- When content exceeds that, a scrollbar appears
-- Updates and Action Items always get their fair share of space
+| File | Change |
+|---|---|
+| `src/pages/CampaignDetail.tsx` | Drop Accounts/Contacts tab, reduce to 5 tabs |
+| `src/components/campaigns/CampaignMARTStrategy.tsx` | Reorder sections (region → audience → message → timing); update validation; pass region/audience counts down |
+| `src/components/campaigns/CampaignMARTRegion.tsx` | Remove `messaging_note`; add live account/contact count footer |
+| `src/components/campaigns/CampaignMARTAudience.tsx` | Replace persona form with `<CampaignAccountsContacts compact selectedRegions={...} />` |
+| `src/components/campaigns/CampaignAccountsContacts.tsx` | Add `compact` + `selectedRegions` props; pre-filter queries; add Position/Industry filter chips in Add modals |
+| `src/components/campaigns/CampaignMARTMessage.tsx` | Add "Generate with AI" buttons on each template type modal; remove materials block |
+| `src/components/campaigns/CampaignMARTTiming.tsx` | Export `isWithinActiveWindow(campaign)` helper |
+| `src/components/campaigns/CampaignCommunications.tsx` | Block outreach outside dates; active-window banner; small materials list |
+| **NEW** `supabase/functions/generate-campaign-template/index.ts` | Lovable AI Gateway call w/ tool-calling for structured templates |
+| `supabase/config.toml` | Register `generate-campaign-template` |
 
-#### Fix 3: Ensure notes panel scrolls properly
+## Technical Notes
 
-The notes summary panel (line 596) already has `max-h-[280px] overflow-y-auto`, but when inside the constrained container from Fix 2, this works correctly. No additional change needed here -- the outer scroll from Fix 2 handles it.
-
-### Summary
-
-| Change | Line(s) | Description |
-|--------|---------|-------------|
-| Replace `autoFocus` with ref callback | 628-634 | Cursor placed after bullet on open |
-| Wrap StakeholdersSection in scrollable container | 1184 | Max 40% height with scrollbar |
-
-### Technical Notes
-
-- The ref callback fires on every render, but since `el.focus()` is idempotent when already focused, this is harmless
-- The `max-h-[40%]` works because the parent has `flex-1 min-h-0` which resolves to an actual pixel height
-- Updates and Action Items sections keep their `flex-1 min-h-0` with `h-[220px]`, ensuring they share remaining space equally
+- **AI**: `LOVABLE_API_KEY` already configured. Default model `google/gemini-3-flash-preview`. Tool-calling enforces JSON schema per template type.
+- **Region source**: existing `src/utils/countryRegionMapping.ts`.
+- **Backward compat**: existing `target_audience` JSON preserved in DB; UI no longer renders or requires it. Audience "Mark Done" reads `campaign_accounts` / `campaign_contacts` counts (already cached).
+- **Performance**: live counts use cached campaign-detail query; Add modals filter server-side via `.in('region', selectedRegions)`.
+- **No DB migration required** — uses existing tables and columns.
 
